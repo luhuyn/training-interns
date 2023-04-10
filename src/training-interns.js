@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, gql, useMutation } from '@apollo/client';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const GET_INTERNS = gql`
   query QueryTrainningInternsDto($filter: GeneralCollectionFilterInput) {
@@ -13,6 +15,7 @@ const GET_INTERNS = gql`
     }
   }
 `;
+
 const SAVE_INTERN = gql`
   mutation SaveTrainningInternDto($data: Trainning_InternInputDto!, $custominput: Dictionary, $isPublish: Boolean) {
     save_Trainning_Intern_dto(data: $data, custominput: $custominput, isPublish: $isPublish) {
@@ -20,21 +23,23 @@ const SAVE_INTERN = gql`
         _id
         name
         age
+        created_date
       }
     }
   }
 `;
 
 const UPDATE_INTERN = gql`
-mutation SaveTrainningInternDto($data: Trainning_InternInputDto!, $custominput: Dictionary, $isPublish: Boolean) {
-  save_Trainning_Intern_dto(data: $data, custominput: $custominput, isPublish: $isPublish) {
-    data{
-      _id
-      name
-      age
-  } 
-}
-}
+  mutation SaveTrainningInternDto($data: Trainning_InternInputDto!, $custominput: Dictionary, $isPublish: Boolean) {
+    save_Trainning_Intern_dto(data: $data, custominput: $custominput, isPublish: $isPublish) {
+      data{
+        _id
+        name
+        age
+        created_date
+      }
+    }
+  }
 `;
 
 const DELETE_INTERN = gql`
@@ -52,6 +57,7 @@ function TrainingInterns() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [age, setAge] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [editing, setEditing] = useState(false);
   const [editInternId, setEditInternId] = useState(null);
 
@@ -62,6 +68,7 @@ function TrainingInterns() {
       },
     },
   });
+
   const [saveIntern] = useMutation(SAVE_INTERN, {
     onCompleted: () => {
       setShowForm(false);
@@ -73,26 +80,28 @@ function TrainingInterns() {
     variables:
     {
       data: {
-        _id: editInternId,
+        _id: editing ? editInternId : null,
         name,
-        age,
+        age: Number(age),
+        created_date: selectedDate.toISOString(),
       },
-      custominput: {},
+      custominput: null,
       isPublish: true,
     },
-  }
-  );
+  });
+
   const [updateIntern] = useMutation(UPDATE_INTERN, {
     onCompleted: () => {
       setShowForm(false);
+      refetch();
       setEditing(false);
       setEditInternId(null);
-      refetch();
     },
     onError: (error) => {
       console.log(error);
     },
   });
+
   const [deleteIntern] = useMutation(DELETE_INTERN, {
     onCompleted: () => {
       refetch();
@@ -101,81 +110,54 @@ function TrainingInterns() {
       console.log(error);
     },
   });
-  const handleInsertClick = () => {
-    setShowForm(true);
-    setEditing(false);
-    setName('');
-    setAge(0);
-  };
 
-  const handleEditClick = (id, name, age) => {
-    setShowForm(true);
-    setEditing(true);
-    setName(name);
-    setAge(age);
-    setEditInternId(id);
-  };
-
-  const handleDeleteClick = (id) => {
-    deleteIntern({
-      variables: {
-        _id: id,
-        custominput: null,
-      },
-    });
-  };
-  
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
-    if (name.trim() === '') {
-      alert('Name is required');
-      return;
-    }
-    const ageValue = Number(age);
-    if (!Number.isInteger(ageValue) || ageValue < 0) {
-      alert('Age must be a non-negative integer');
-      return;
-    }
+  const handleSaveIntern = () => {
     if (editing) {
       updateIntern({
         variables: {
           data: {
             _id: editInternId,
             name,
-            age: ageValue,
+            age: Number(age),
+            created_date: selectedDate.toISOString(),
           },
-          custominput: {},
+          custominput: null,
           isPublish: true,
         },
       });
     } else {
-      saveIntern({
-        variables: {
-          data: {
-            name,
-            age: ageValue,
-          },
-          custominput: {},
-          isPublish: true,
-        },
-      });
+      saveIntern();
     }
-    setShowForm(false);
-  };  
+  };
 
+  const handleEditIntern = (intern) => {
+    setEditing(true);
+    setEditInternId(intern._id);
+    setName(intern.name);
+    setAge(intern.age);
+    setSelectedDate(new Date(intern.created_date));
+    setShowForm(true);
+  };
 
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>Error :(</p>;
+  const handleDeleteIntern = (intern) => {
+    deleteIntern({
+      variables: {
+        _id: intern._id,
+        custominput: null,
+      },
+    });
+  };
 
   return (
     <div>
-      <h2>Training Interns</h2>
+      <h1>Training Interns</h1>
       {!showTable && (
         <button onClick={() => setShowTable(true)}>Show Table</button>
       )}
       {showTable && (
         <div>
           <button onClick={() => setShowTable(false)}>Hide Table</button>
+          <button onClick={() => setShowForm(true)}>Add Intern</button>
           <table>
             <thead>
               <tr>
@@ -186,26 +168,25 @@ function TrainingInterns() {
               </tr>
             </thead>
             <tbody>
-              {data.query_Trainning_Interns_dto.data.map((intern) => (
+              {data?.query_Trainning_Interns_dto?.data?.map((intern) => (
                 <tr key={intern._id}>
                   <td>{intern.name}</td>
                   <td>{intern.age}</td>
-                  <td>{intern.created_date}</td>
+                  <td>{new Date(intern.created_date).toLocaleDateString()}</td>
                   <td>
-                    <button onClick={() => handleEditClick(intern._id, intern.name, intern.age)}>Edit</button>
-                    <button onClick={() => handleDeleteClick(intern._id)}>Delete</button>
+                    <button onClick={() => handleEditIntern(intern)}>Edit</button>
+                    <button onClick={() => handleDeleteIntern(intern)}>Delete</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <br />
-          <button onClick={handleInsertClick}>Insert New Intern</button>
         </div>
       )}
       {showForm && (
         <div>
-          <form onSubmit={handleFormSubmit}>
+          <h2>{editing ? 'Edit Intern' : 'Add Intern'}</h2>
+          <form onSubmit={(e) => { e.preventDefault(); handleSaveIntern(); }}>
             <label>
               Name:
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
@@ -213,10 +194,19 @@ function TrainingInterns() {
             <br />
             <label>
               Age:
-              <input type="number" value={age} onChange={(e) => setAge(parseInt(e.target.value))} />
+              <input type="number" value={age} onChange={(e) => setAge(e.target.value)} />
             </label>
             <br />
-            <button type="submit">{editing ? 'Update Intern' : 'Save Intern'}</button>
+            <label>
+              Created Date:
+              <DatePicker
+                selected={selectedDate}
+                onChange={(date) => setSelectedDate(date)}
+              />
+            </label>
+            <br />
+            <button type="submit">{editing ? 'Save Changes' : 'Add Intern'}</button>
+            <button onClick={() => { setShowForm(false); setEditing(false); setEditInternId(null); }}>Cancel</button>
           </form>
         </div>
       )}
